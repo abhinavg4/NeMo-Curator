@@ -237,17 +237,40 @@ class CompletionTokenCountFilter(DocumentFilter):
         except NoWorkerError as e:
             msg = f"Error loading tokenizer: {e}"
             raise RuntimeError(msg) from e
+        print("Am I fast?", tokenizer.is_fast)
+        # The tokenizer is already fast.
+        # Old code
 
-        return outpt.apply(
-            lambda text: len(
-                tokenizer.apply_chat_template(
-                    [{"role": "assistant", "content": text}],
-                    tokenize=True,
-                    add_generation_prompt=False,
-                    truncation=False,
+        old_code = False
+        if old_code:
+            return outpt.apply(
+                lambda text: len(
+                    tokenizer.apply_chat_template(
+                        [{"role": "assistant", "content": text}],
+                        tokenize=True,
+                        add_generation_prompt=False,
+                        truncation=False,
+                    )
                 )
             )
-        )
+        # Create a copy of the output series
+        outpt_copy = outpt.copy()
+
+        # Apply chat template without tokenization
+        templates_list = outpt_copy.apply(
+            lambda text: tokenizer.apply_chat_template(
+                [{"role": "assistant", "content": text}],
+                tokenize=False,
+                add_generation_prompt=False,
+                truncation=False,
+            )
+        ).tolist()
+
+        # Batch tokenize all templates at once
+        tokenized = tokenizer(templates_list)
+
+        # Return lengths as a Series
+        return pd.Series([len(tokens) for tokens in tokenized["input_ids"]])
 
     @batched
     def keep_document(self, scores: pd.Series) -> pd.Series:
